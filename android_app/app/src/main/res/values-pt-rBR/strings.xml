@@ -611,4 +611,12 @@
     <string name="import_error_generic">Erro durante a importação: %1$s</string>
     <string name="import_no_users_available">Nenhum usuário disponível para importação.</string>
     <string name="backup_error_main_db_not_found">Erro: Arquivo do banco de dados principal \'%1$s\' não encontrado.</string>
+    <string name="backup_error_generic">Erro durante o backup do banco de dados: %1$s</string>
+    <string name="restore_error_db_files_missing">Falha na restauração: Arquivos essenciais do banco de dados não encontrados no backup.</string>
+    <string name="restore_error_generic">Erro durante a restauração do banco de dados: %1$s</string>
+    <string name="eval_no_age_band">Avaliação indisponível: Nenhuma faixa etária correspondente no momento da medição.</string>
+    <string name="bluetooth_scale_error_max_users_reached">Número máximo de usuários da balança atingido</string>
+    <string name="permission_read_write_data_description">ler/gravar dados do openScale, incluindo informações do usuário e todas as medições salvas</string>
+    <string name="permission_read_write_data_label">Ler e gravar dados do openScale</string>
+    <string name="dialog_bt_interaction_title_choose_user">Selecionar usuário na balança</string>
 </resources>
