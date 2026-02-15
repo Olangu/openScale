@@ -107,6 +107,7 @@ object EvaluationReferenceTables {
     val waterFemale = AgeBandStrategy(listOf(AgeBand(10, 1000, 45f, 60f)))
 
     // Muscle Mass %
+    // Muscle Reference: "Skeletal muscle mass and distribution in 468 men and women aged 18–88 yr" by IAN JANSSEN, STEVEN B. HEYMSFIELD, ZIMIAN WANG, and ROBERT ROS in J Appl Physiol89: 81–88, 2000
     val muscleMale = AgeBandStrategy(
         listOf(
             AgeBand(18, 29, 37.9f, 46.7f),
@@ -223,8 +224,8 @@ object EvaluationReferenceTables {
 
     /** Waist circumference (cm) thresholds by gender. */
     fun waistStrategyCm(gender: GenderType): EvaluationStrategy = when (gender) {
-        GenderType.MALE   -> AgeBandStrategy(listOf(AgeBand(18, 90, -1f, 94f)))
-        GenderType.FEMALE -> AgeBandStrategy(listOf(AgeBand(18, 90, -1f, 80f)))
+        GenderType.MALE   -> AgeBandStrategy(listOf(AgeBand(18, 90, 0f, 94f)))
+        GenderType.FEMALE -> AgeBandStrategy(listOf(AgeBand(18, 90, 0f, 80f)))
     }
 
     /** Target weight bounds computed from height (cm) and BMI ranges by gender. */
