@@ -114,9 +114,9 @@ enum class SupportedLanguage(val code: String, val nativeDisplayName: String) {
     //SLOVAK("sk", "Slovak (Slovenčina)"),
     //SLOVENIAN("sl", "Slovenian (Slovenski Jezik)"),
     SPANISH("es", "Spanish (Español)"),
-    SWEDISH("sv", "Swedish (Svenska)");
+    SWEDISH("sv", "Swedish (Svenska)"),
     //TAMIL("ta", "Tamil (தமிழ்)"),
-    TURKISH("tr", "Turkish (Türkçe)"),
+    TURKISH("tr", "Turkish (Türkçe)");
     //UKRAINIAN("uk", "Ukrainian (Українська)"),
     //VIETNAMESE("vi", "Vietnamese (Tiếng Việt)");
 
