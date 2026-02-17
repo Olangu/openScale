@@ -428,26 +428,23 @@ class SharedViewModel @Inject constructor(
 
     // --- Optional: ad-hoc pipeline with provided UI state ---
     fun smoothedEnrichedMeasurements(
-        startTimeMillisFlow: Flow<Long?>,
-        endTimeMillisFlow: Flow<Long?>,
-        typesToSmoothAndDisplayFlow: Flow<Set<Int>>
+        startTimeMillis: Long?,
+        endTimeMillis: Long?,
+        typeIds: Set<Int>
     ): Flow<List<EnrichedMeasurement>> {
         return selectedUserId.flatMapLatest { userId ->
-            if (userId == null) {
-                flowOf(emptyList())
-            } else {
-                measurementFacade.pipeline(
-                    userId = userId,
-                    measurementTypesFlow = measurementTypes,
-                    startTimeMillisFlow = startTimeMillisFlow,
-                    endTimeMillisFlow = endTimeMillisFlow,
-                    typesToSmoothFlow = typesToSmoothAndDisplayFlow,
-                    algorithmFlow = selectedSmoothingAlgorithm,
-                    alphaFlow = smoothingAlpha,
-                    windowFlow = smoothingWindowSize,
-                    maxGapDaysFlow = chartSmoothingMaxGapDays
-                )
-            }
+            if (userId == null) flowOf(emptyList())
+            else measurementFacade.pipeline(
+                userId = userId,
+                measurementTypesFlow = measurementTypes,
+                startTimeMillisFlow = flowOf(startTimeMillis),
+                endTimeMillisFlow = flowOf(endTimeMillis),
+                typesToSmoothFlow = flowOf(typeIds),
+                algorithmFlow = selectedSmoothingAlgorithm,
+                alphaFlow = smoothingAlpha,
+                windowFlow = smoothingWindowSize,
+                maxGapDaysFlow = chartSmoothingMaxGapDays
+            )
         }
     }
 
