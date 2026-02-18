@@ -70,7 +70,6 @@ import com.patrykandpatrick.vico.core.cartesian.Zoom
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -135,7 +134,7 @@ fun MeasurementChart(
     val effectiveShowTypeFilterRow = if (targetMeasurementTypeId != null) false else showTypeFilterRowSetting
 
     val allAvailableMeasurementTypes by sharedViewModel.measurementTypes.collectAsState()
-    val defaultSelectedTypesValue = remember(targetMeasurementTypeId, allAvailableMeasurementTypes) {
+    val defaultSelectedTypesValue = remember(targetMeasurementTypeId) {
         if (targetMeasurementTypeId != null) {
             setOf(targetMeasurementTypeId.toString())
         } else {
@@ -335,16 +334,24 @@ fun MeasurementChart(
                 }
             }
             chartSeries.isEmpty() -> {
+                // Pre-compute expensive checks for message logic
+                val hasNoPlottableTypes = remember(allAvailableMeasurementTypes) {
+                    allAvailableMeasurementTypes.none { it.isEnabled && (it.inputType == InputFieldType.FLOAT || it.inputType == InputFieldType.INT) }
+                }
+                val hasDataForSelectedTypes = remember(smoothedData, currentSelectedTypeIntIds) {
+                    (smoothedData ?: emptyList()).any { m -> m.measurementWithValues.values.any { v -> v.type.id in currentSelectedTypeIntIds } }
+                }
+
                 Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     val message = when {
                         lineTypesToActuallyPlot.isEmpty() && effectiveShowTypeFilterRow -> when {
-                            currentSelectedTypeIntIds.isNotEmpty() && (smoothedData ?: emptyList()).none { m -> m.measurementWithValues.values.any { v -> v.type.id in currentSelectedTypeIntIds } } ->
+                            currentSelectedTypeIntIds.isNotEmpty() && !hasDataForSelectedTypes ->
                                 stringResource(R.string.line_chart_no_data_for_selected_types)
                             currentSelectedTypeIntIds.isEmpty() -> stringResource(R.string.line_chart_please_select_types)
                             else -> stringResource(R.string.line_chart_no_data_to_display)
                         }
                         lineTypesToActuallyPlot.isEmpty() ->
-                            if (allAvailableMeasurementTypes.none { it.isEnabled && (it.inputType == InputFieldType.FLOAT || it.inputType == InputFieldType.INT) })
+                            if (hasNoPlottableTypes)
                                 stringResource(R.string.line_chart_no_plottable_types)
                             else stringResource(R.string.line_chart_no_data_or_types_to_select)
                         (smoothedData ?: emptyList()).isEmpty() && filteredMeasurements.isEmpty() && currentSelectedTypeIntIds.isNotEmpty() ->
@@ -367,9 +374,12 @@ fun MeasurementChart(
                 val modelProducer = rememberChartModelProducer(chartSeries, rawChartSeries, isSmoothingActive, showDataPointsSetting)
                 val layers = rememberChartLayers(chartSeries, rawChartSeries, isSmoothingActive, showDataPointsSetting, targetMeasurementTypeId, goalValuesForScaling)
 
+                val typeById = remember(allAvailableMeasurementTypes) {
+                    allAvailableMeasurementTypes.associateBy { it.id }
+                }
                 val goalDecorations = if (showGoalLinesSetting) {
                     goalsToActuallyPlot.map { goal ->
-                        rememberGoalLine(goal = goal, type = allAvailableMeasurementTypes.find { it.id == goal.measurementTypeId })
+                        rememberGoalLine(goal = goal, type = typeById[goal.measurementTypeId])
                     }
                 } else emptyList()
 

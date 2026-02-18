@@ -67,6 +67,9 @@ import java.time.format.DateTimeFormatter
 import kotlin.math.ceil
 import kotlin.math.floor
 
+// Helper data class for holding 4 partitioned series
+private data class Quad<T>(val first: T, val second: T, val third: T, val fourth: T)
+
 /**
  * Creates, remembers, and updates a [CartesianChartModelProducer].
  * Transforms [ChartSeries] data into Vico's chart model, separating raw, smoothed and projected layers.
@@ -81,13 +84,18 @@ internal fun rememberChartModelProducer(
     val modelProducer = remember { CartesianChartModelProducer() }
 
     LaunchedEffect(chartSeries, rawChartSeries, isSmoothingActive, showDataPointsSetting) {
-        val smoothedSeriesStart  = chartSeries.filter { !it.isProjected && !it.type.isOnRightYAxis }
-        val smoothedSeriesEnd    = chartSeries.filter { !it.isProjected && it.type.isOnRightYAxis }
-        val projectedSeriesStart = chartSeries.filter { it.isProjected && !it.type.isOnRightYAxis }
-        val projectedSeriesEnd   = chartSeries.filter { it.isProjected && it.type.isOnRightYAxis }
+        // Partition once instead of 4× filter
+        val (smoothedSeries, projectedSeries) = chartSeries.partition { !it.isProjected }
+        val (smoothedSeriesStart, smoothedSeriesEnd) = smoothedSeries.partition { !it.type.isOnRightYAxis }
+        val (projectedSeriesStart, projectedSeriesEnd) = projectedSeries.partition { !it.type.isOnRightYAxis }
 
-        val rawSeriesStart = if (isSmoothingActive) rawChartSeries.filter { !it.isProjected && !it.type.isOnRightYAxis } else emptyList()
-        val rawSeriesEnd   = if (isSmoothingActive) rawChartSeries.filter { !it.isProjected && it.type.isOnRightYAxis } else emptyList()
+        // Partition raw series only when smoothing active
+        val (rawSeriesStart, rawSeriesEnd) = if (isSmoothingActive) {
+            val (start, end) = rawChartSeries.filter { !it.isProjected }.partition { !it.type.isOnRightYAxis }
+            start to end
+        } else {
+            emptyList<ChartSeries>() to emptyList()
+        }
 
         modelProducer.runTransaction {
             // Layer 0: Raw points START (only when smoothing active and data points enabled)
@@ -139,33 +147,43 @@ internal fun rememberChartLayers(
     targetMeasurementTypeId: Int?,
     goalValuesForScaling: List<Float> = emptyList()
 ): List<LineCartesianLayer> {
-    val rawSeriesStart = remember(rawChartSeries, isSmoothingActive) {
-        if (isSmoothingActive) rawChartSeries.filter { !it.isProjected && !it.type.isOnRightYAxis } else emptyList()
+    // Partition once instead of 6× filter
+    val (rawStart, rawEnd) = remember(rawChartSeries, isSmoothingActive) {
+        if (isSmoothingActive) {
+            val (start, end) = rawChartSeries.filter { !it.isProjected }.partition { !it.type.isOnRightYAxis }
+            start to end
+        } else {
+            emptyList<ChartSeries>() to emptyList()
+        }
     }
-    val rawSeriesEnd = remember(rawChartSeries, isSmoothingActive) {
-        if (isSmoothingActive) rawChartSeries.filter { !it.isProjected && it.type.isOnRightYAxis } else emptyList()
+
+    val (smoothedStart, smoothedEnd, projectedStart, projectedEnd) = remember(chartSeries) {
+        val (smoothed, projected) = chartSeries.partition { !it.isProjected }
+        val (sStart, sEnd) = smoothed.partition { !it.type.isOnRightYAxis }
+        val (pStart, pEnd) = projected.partition { !it.type.isOnRightYAxis }
+        Quad(sStart, sEnd, pStart, pEnd)
     }
-    val smoothedSeriesStart  = remember(chartSeries) { chartSeries.filter { !it.isProjected && !it.type.isOnRightYAxis } }
-    val smoothedSeriesEnd    = remember(chartSeries) { chartSeries.filter { !it.isProjected && it.type.isOnRightYAxis } }
-    val projectedSeriesStart = remember(chartSeries) { chartSeries.filter { it.isProjected && !it.type.isOnRightYAxis } }
-    val projectedSeriesEnd   = remember(chartSeries) { chartSeries.filter { it.isProjected && it.type.isOnRightYAxis } }
 
-    val rawColorsStart       = remember(rawSeriesStart)       { rawSeriesStart.map { Color(it.type.color) } }
-    val rawColorsEnd         = remember(rawSeriesEnd)         { rawSeriesEnd.map { Color(it.type.color) } }
-    val smoothedColorsStart  = remember(smoothedSeriesStart)  { smoothedSeriesStart.map { Color(it.type.color) } }
-    val smoothedColorsEnd    = remember(smoothedSeriesEnd)    { smoothedSeriesEnd.map { Color(it.type.color) } }
-    val projectedColorsStart = remember(projectedSeriesStart) { projectedSeriesStart.map { Color(it.type.color) } }
-    val projectedColorsEnd   = remember(projectedSeriesEnd)   { projectedSeriesEnd.map { Color(it.type.color) } }
+    val rawColorsStart       = remember(rawStart) { rawStart.map { Color(it.type.color) } }
+    val rawColorsEnd         = remember(rawEnd) { rawEnd.map { Color(it.type.color) } }
+    val smoothedColorsStart  = remember(smoothedStart) { smoothedStart.map { Color(it.type.color) } }
+    val smoothedColorsEnd    = remember(smoothedEnd) { smoothedEnd.map { Color(it.type.color) } }
+    val projectedColorsStart = remember(projectedStart) { projectedStart.map { Color(it.type.color) } }
+    val projectedColorsEnd   = remember(projectedEnd) { projectedEnd.map { Color(it.type.color) } }
 
-    val rangeProvider = remember(goalValuesForScaling) {
+    val goalValuesDouble = remember(goalValuesForScaling) {
+        goalValuesForScaling.map { it.toDouble() }
+    }
+
+    val rangeProvider = remember(goalValuesDouble) {
         object : CartesianLayerRangeProvider {
             override fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore): Double {
-                val effectiveMin = (goalValuesForScaling.map { it.toDouble() } + minY).minOrNull() ?: minY
+                val effectiveMin = (goalValuesDouble + minY).minOrNull() ?: minY
                 val delta = maxY - minY
                 return if (delta == 0.0) effectiveMin - 1.0 else floor(effectiveMin - 0.1 * delta)
             }
             override fun getMaxY(minY: Double, maxY: Double, extraStore: ExtraStore): Double {
-                val effectiveMax = (goalValuesForScaling.map { it.toDouble() } + maxY).maxOrNull() ?: maxY
+                val effectiveMax = (goalValuesDouble + maxY).maxOrNull() ?: maxY
                 val delta = maxY - minY
                 return if (delta == 0.0) effectiveMax + 1.0 else ceil(effectiveMax + 0.1 * delta)
             }
@@ -196,18 +214,18 @@ internal fun rememberChartLayers(
     }
 
     // Layer 0 & 1: RAW points (only when smoothing active and data points enabled)
-    if (rawSeriesStart.isNotEmpty() && showDataPointsSetting) addLayer(rawColorsStart, Axis.Position.Vertical.Start, showPoints = true, isProjection = false, isPointConnected = false)
-    if (rawSeriesEnd.isNotEmpty() && showDataPointsSetting)   addLayer(rawColorsEnd,   Axis.Position.Vertical.End,   showPoints = true, isProjection = false, isPointConnected = false)
+    if (rawStart.isNotEmpty() && showDataPointsSetting) addLayer(rawColorsStart, Axis.Position.Vertical.Start, showPoints = true, isProjection = false, isPointConnected = false)
+    if (rawEnd.isNotEmpty() && showDataPointsSetting)   addLayer(rawColorsEnd,   Axis.Position.Vertical.End,   showPoints = true, isProjection = false, isPointConnected = false)
 
     // Layer 2 & 3: Smoothed/plain line
     // - Smoothing ON  → line only (no points)
     // - Smoothing OFF → line + optional points via showDataPointsSetting
-    if (smoothedSeriesStart.isNotEmpty()) addLayer(smoothedColorsStart, Axis.Position.Vertical.Start, showPoints = !isSmoothingActive && showDataPointsSetting, isProjection = false)
-    if (smoothedSeriesEnd.isNotEmpty())   addLayer(smoothedColorsEnd,   Axis.Position.Vertical.End,   showPoints = !isSmoothingActive && showDataPointsSetting, isProjection = false)
+    if (smoothedStart.isNotEmpty()) addLayer(smoothedColorsStart, Axis.Position.Vertical.Start, showPoints = !isSmoothingActive && showDataPointsSetting, isProjection = false)
+    if (smoothedEnd.isNotEmpty())   addLayer(smoothedColorsEnd,   Axis.Position.Vertical.End,   showPoints = !isSmoothingActive && showDataPointsSetting, isProjection = false)
 
     // Layer 4 & 5: Projected (dashed)
-    if (projectedSeriesStart.isNotEmpty()) addLayer(projectedColorsStart, Axis.Position.Vertical.Start, showPoints = false, isProjection = true)
-    if (projectedSeriesEnd.isNotEmpty())   addLayer(projectedColorsEnd,   Axis.Position.Vertical.End,   showPoints = false, isProjection = true)
+    if (projectedStart.isNotEmpty()) addLayer(projectedColorsStart, Axis.Position.Vertical.Start, showPoints = false, isProjection = true)
+    if (projectedEnd.isNotEmpty())   addLayer(projectedColorsEnd,   Axis.Position.Vertical.End,   showPoints = false, isProjection = true)
 
     return layers
 }
