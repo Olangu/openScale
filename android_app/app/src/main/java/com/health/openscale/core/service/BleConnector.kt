@@ -482,7 +482,8 @@ class BleConnector(
                 MeasurementTypeKey.MUSCLE       to UnitType.PERCENT,
                 MeasurementTypeKey.VISCERAL_FAT to UnitType.PERCENT,
                 MeasurementTypeKey.BONE         to UnitType.KG,
-                MeasurementTypeKey.LBM          to UnitType.KG
+                MeasurementTypeKey.LBM          to UnitType.KG,
+                MeasurementTypeKey.HEART_RATE   to UnitType.BPM
             )
 
             val values = mutableListOf<MeasurementValue>()
@@ -519,6 +520,27 @@ class BleConnector(
                 }
             }
 
+            /**
+             * Adds an integer value for the given key if present & valid.
+             * Used for heart rate which is stored as an Int.
+             */
+            fun addConvertedIfValid(
+                value: Int?,
+                key: MeasurementTypeKey
+            ) {
+                val v = value ?: return
+                if (v <= 0) return
+                getTypeId(key)?.let { typeId ->
+                    values.add(
+                        MeasurementValue(
+                            measurementId = 0,
+                            typeId = typeId,
+                            intValue = v
+                        )
+                    )
+                }
+            }
+
             // Collect all supported values from ScaleMeasurement, converting as needed.
             addConvertedIfValid(measurementData.weight,       MeasurementTypeKey.WEIGHT)
             addConvertedIfValid(measurementData.fat,          MeasurementTypeKey.BODY_FAT)
@@ -527,6 +549,7 @@ class BleConnector(
             addConvertedIfValid(measurementData.visceralFat,  MeasurementTypeKey.VISCERAL_FAT)
             addConvertedIfValid(measurementData.bone,         MeasurementTypeKey.BONE)
             addConvertedIfValid(measurementData.lbm,          MeasurementTypeKey.LBM)
+            addConvertedIfValid(measurementData.heartRate, MeasurementTypeKey.HEART_RATE)
 
             if (values.isEmpty()) {
                 LogManager.w(TAG, "No valid values from measurement of $deviceName to save.")

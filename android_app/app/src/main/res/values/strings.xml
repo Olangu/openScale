@@ -170,6 +170,7 @@
     <string name="measurement_type_caliper3">Caliper 3</string>
     <string name="measurement_type_fat_caliper">Fat Caliper</string>
     <string name="measurement_type_bmr">BMR</string>
+    <string name="measurement_type_heart_rate">Heart Rate</string>
     <string name="measurement_type_tdee">TDEE</string>
     <string name="measurement_type_calories">Calories</string>
     <string name="measurement_type_comment">Comment</string>

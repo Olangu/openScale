@@ -245,6 +245,7 @@ class MiScaleS400Handler : ScaleDeviceHandler() {
             dateTime = Date()
             weight = measurement.weightKg
             userId = user.id
+            heartRate = measurement.heartRate ?: 0
 
             // Calculate body composition if we have impedance
             measurement.impedance?.let { imp ->
