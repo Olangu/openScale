@@ -18,6 +18,8 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,7 +29,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,7 +38,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -47,14 +50,12 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material.icons.outlined.CheckBox
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -193,22 +194,42 @@ fun TableScreen(
         }
     )
 
+    val dateFormatterDate = remember {
+        DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+    }
+    val dateFormatterDayOfWeek = remember {
+        SimpleDateFormat("EE", Locale.getDefault())
+    }
+    val dateFormatterTime = remember {
+        DateFormat.getTimeInstance(DateFormat.SHORT, Locale.getDefault())
+    }
+
+    val plausibleRangesByTypeKey = remember(displayedTypes) {
+        displayedTypes.associate { type ->
+            type.key to sharedViewModel.getPlausiblePercentRange(type.key)
+        }
+    }
+
     // Transform measurements -> table rows (compute eval state & formatted strings here).
-    val tableData = remember(enrichedMeasurements, displayedTypes, allAvailableTypesFromVM, userEvaluationContext) {
+    val tableData = remember(
+        enrichedMeasurements,
+        displayedTypes,
+        userEvaluationContext,
+        plausibleRangesByTypeKey
+    ) {
         if (enrichedMeasurements.isEmpty() || displayedTypes.isEmpty()) {
             emptyList()
         } else {
-            val dateFormatterDate = DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
-            val dateFormatterDayOfWeek = SimpleDateFormat("EE", Locale.getDefault())
-            val dateFormatterTime = DateFormat.getTimeInstance(DateFormat.SHORT, Locale.getDefault())
-
             enrichedMeasurements.map { enrichedItem ->
                 val ts = enrichedItem.measurementWithValues.measurement.timestamp
                 val date = Date(ts)
 
+                val valuesByTypeId = enrichedItem.valuesWithTrend
+                    .associateBy { it.currentValue.type.id }
+
                 val cellValues: Map<Int, TableCellData?> = displayedTypes.associate { colType ->
                     val typeId = colType.id
-                    val valueWithTrend = enrichedItem.valuesWithTrend.find { it.currentValue.type.id == typeId }
+                    val valueWithTrend = valuesByTypeId[typeId]
 
                     if (valueWithTrend != null) {
                         val originalMeasurementValue = valueWithTrend.currentValue.value
@@ -251,7 +272,8 @@ fun TableScreen(
                         } else null
 
                         val noAgeBand = evalResult?.let { it.lowLimit < 0f || it.highLimit < 0f } ?: false
-                        val plausible = sharedViewModel.getPlausiblePercentRange(actualType.key)
+
+                        val plausible = plausibleRangesByTypeKey[actualType.key]
                         val outOfPlausibleRange =
                             if (numeric == null) {
                                 false
@@ -296,9 +318,39 @@ fun TableScreen(
                 TableRowDataInternal(
                     measurementId = enrichedItem.measurementWithValues.measurement.id,
                     timestamp = ts,
-                    formattedTimestamp = dateFormatterDate.format(date) + " (" + dateFormatterDayOfWeek.format(date) + ")\n" + dateFormatterTime.format(date),
+                    formattedTimestamp = "${dateFormatterDate.format(date)} (${dateFormatterDayOfWeek.format(date)})\n${dateFormatterTime.format(date)}",
                     values = cellValues
                 )
+            }
+        }
+    }
+
+    // Track the latest measurement ID to detect new additions and manage highlight
+    val latestMeasurementId = remember(tableData) {
+        tableData.firstOrNull()?.measurementId
+    }
+
+    // State for highlighting newest item (fades after 3 seconds)
+    var highlightedItemId by remember { mutableStateOf<Int?>(null) }
+
+    // State for LazyColumn to enable scrolling
+    val lazyListState = rememberLazyListState()
+
+    // Debounced auto-scroll: only scroll after measurements stop arriving for 500ms
+    LaunchedEffect(latestMeasurementId) {
+        if (latestMeasurementId != null && tableData.isNotEmpty()) {
+            // Wait 500ms to see if more measurements arrive (batch import)
+            kotlinx.coroutines.delay(500)
+
+            // Check if still the newest (no newer measurement arrived during delay)
+            if (latestMeasurementId == tableData.firstOrNull()?.measurementId) {
+                // Set highlight
+                highlightedItemId = latestMeasurementId
+                // Scroll to top (newest measurement)
+                lazyListState.animateScrollToItem(0)
+                // Remove highlight after 1,5 seconds
+                kotlinx.coroutines.delay(1500)
+                highlightedItemId = null
             }
         }
     }
@@ -539,9 +591,9 @@ fun TableScreen(
             filterLogic = { allTypes ->
                 allTypes.filter {
                     it.isEnabled &&
-                    it.key != MeasurementTypeKey.DATE &&
-                    it.key != MeasurementTypeKey.TIME &&
-                    it.key != MeasurementTypeKey.USER
+                            it.key != MeasurementTypeKey.DATE &&
+                            it.key != MeasurementTypeKey.TIME &&
+                            it.key != MeasurementTypeKey.USER
                 }
             },
             defaultSelectionLogic = { availableFilteredTypes ->
@@ -672,18 +724,25 @@ fun TableScreen(
                 HorizontalDivider()
 
                 // --- DATA ROWS ---
-                LazyColumn(Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = lazyListState
+                ) {
                     items(tableData, key = { it.measurementId }) { rowData ->
                         val isSelected = selectedItemIds.contains(rowData.measurementId)
+                        val isHighlighted = rowData.measurementId == highlightedItemId
 
                         Row(
                             Modifier
                                 .fillMaxWidth()
                                 .background(
-                                    if (isSelected && isInSelectionMode) {
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                    } else {
-                                        MaterialTheme.colorScheme.surface
+                                    when {
+                                        isSelected && isInSelectionMode ->
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                        isHighlighted ->
+                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+                                        else ->
+                                            MaterialTheme.colorScheme.surface
                                     }
                                 )
                                 .clickable {
