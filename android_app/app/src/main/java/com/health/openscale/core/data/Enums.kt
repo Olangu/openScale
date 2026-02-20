@@ -539,7 +539,8 @@ enum class BodyFatFormulaOption {
     DEURENBERG_1992,
     EDDY_1976,
     GALLAGHER_2000_NON_ASIAN,
-    GALLAGHER_2000_ASIAN;
+    GALLAGHER_2000_ASIAN,
+    US_NAVY;
 
     fun displayName(context: Context) = when (this) {
         OFF -> context.getString(R.string.formula_off)
@@ -548,6 +549,7 @@ enum class BodyFatFormulaOption {
         EDDY_1976 -> context.getString(R.string.formula_bf_eddy_1976)
         GALLAGHER_2000_NON_ASIAN -> context.getString(R.string.formula_bf_gallagher_2000_non_asian)
         GALLAGHER_2000_ASIAN -> context.getString(R.string.formula_bf_gallagher_2000_asian)
+        US_NAVY -> context.getString(R.string.formula_bf_us_navy)
     }
 
     fun shortDescription(ctx: Context) = when (this) {
@@ -557,6 +559,7 @@ enum class BodyFatFormulaOption {
         EDDY_1976 -> ctx.getString(R.string.bf_eddy_1976_short)
         GALLAGHER_2000_NON_ASIAN -> ctx.getString(R.string.bf_gallagher_2000_non_asian_short)
         GALLAGHER_2000_ASIAN -> ctx.getString(R.string.bf_gallagher_2000_asian_short)
+        US_NAVY -> ctx.getString(R.string.bf_us_navy_short)
     }
     fun longDescription(ctx: Context) = when (this) {
         OFF -> ctx.getString(R.string.formula_desc_off_long)
@@ -565,6 +568,7 @@ enum class BodyFatFormulaOption {
         EDDY_1976 -> ctx.getString(R.string.bf_eddy_1976_long)
         GALLAGHER_2000_NON_ASIAN -> ctx.getString(R.string.bf_gallagher_2000_non_asian_long)
         GALLAGHER_2000_ASIAN -> ctx.getString(R.string.bf_gallagher_2000_asian_long)
+        US_NAVY -> ctx.getString(R.string.bf_us_navy_long)
     }
 }
 

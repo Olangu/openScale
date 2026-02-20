@@ -238,6 +238,7 @@
     <string name="formula_lbm_boer_1984">Boer (1984)</string>
     <string name="formula_lbm_hume_1966">Hume (1966)</string>
     <string name="formula_lbm_weight_minus_body_fat">Weight − Body Fat</string>
+    <string name="formula_bf_us_navy">U.S. Navy</string>
 
     <string name="formula_desc_off_short">No automatic calculation</string>
     <string name="formula_desc_off_long">This metric is not auto-calculated. You can enter values manually.</string>
@@ -265,6 +266,8 @@
     <string name="lbm_hume_1966_long">Early LBM model. Simple and widely used; not tailored to very athletic builds.</string>
     <string name="lbm_weight_minus_bf_short">Weight − Body Fat</string>
     <string name="lbm_weight_minus_bf_long">Computes LBM as total weight minus fat mass derived from the chosen body-fat formula. Accuracy depends on the BF estimate.</string>
+    <string name="bf_us_navy_short">U.S. Navy method</string>
+    <string name="bf_us_navy_long">Calculates body fat percentage based on waist, neck, and (for females) hip circumferences according to the U.S. Navy standard.</string>
 
     <string name="batch_update_status_report">%1$d: %2$s</string>
     <string name="dialog_title_confirm_generic">Confirm %1$s?</string>
