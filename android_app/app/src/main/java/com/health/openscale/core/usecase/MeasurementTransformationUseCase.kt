@@ -216,23 +216,31 @@ class MeasurementTransformationUseCase @Inject constructor(
             if (bfOpt != BodyFatFormulaOption.OFF) {
                 val bf = when (bfOpt) {
                     BodyFatFormulaOption.US_NAVY -> {
-                        val waist = values.find { it.typeId == byKey[MeasurementTypeKey.WAIST]?.id }?.floatValue
-                        val neck = values.find { it.typeId == byKey[MeasurementTypeKey.NECK]?.id }?.floatValue
-                        val hips = values.find { it.typeId == byKey[MeasurementTypeKey.HIPS]?.id }?.floatValue
+                        val waistIn = values.find { it.typeId == byKey[MeasurementTypeKey.WAIST]?.id }?.let {
+                            it.floatValue?.let { value ->
+                                ConverterUtils.convertFloatValueUnit(value, byKey[MeasurementTypeKey.WAIST]!!.unit, UnitType.INCH)
+                            }
+                        }
+                        val neckIn = values.find { it.typeId == byKey[MeasurementTypeKey.NECK]?.id }?.let {
+                            it.floatValue?.let { value ->
+                                ConverterUtils.convertFloatValueUnit(value, byKey[MeasurementTypeKey.NECK]!!.unit, UnitType.INCH)
+                            }
+                        }
+                        val heightIn = (heightCm / 2.54).toFloat()
 
-                        if (waist != null && waist > 0f && neck != null && neck > 0f) {
-                            val waistIn = waist / 2.54f
-                            val neckIn = neck / 2.54f
-                            val heightIn = (heightCm / 2.54).toFloat()
-
+                        if (waistIn != null && waistIn > 0f && neckIn != null && neckIn > 0f && heightIn > 0f) {
                             if (isMale) {
                                 val diff = waistIn - neckIn
                                 if (diff > 0f) {
                                     86.010f * log10(diff) - 70.041f * log10(heightIn) + 36.76f
                                 } else null
                             } else {
-                                if (hips != null && hips > 0f) {
-                                    val hipsIn = hips / 2.54f
+                                val hipsIn = values.find { it.typeId == byKey[MeasurementTypeKey.HIPS]?.id }?.let {
+                                    it.floatValue?.let { value ->
+                                        ConverterUtils.convertFloatValueUnit(value, byKey[MeasurementTypeKey.HIPS]!!.unit, UnitType.INCH)
+                                    }
+                                }
+                                if (hipsIn != null && hipsIn > 0f) {
                                     val diff = waistIn + hipsIn - neckIn
                                     if (diff > 0f) {
                                         163.205f * log10(diff) - 97.684f * log10(heightIn) - 78.387f
