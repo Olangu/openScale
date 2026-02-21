@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,6 +74,7 @@ import com.health.openscale.core.utils.LocaleUtils
 import com.health.openscale.ui.components.RoundMeasurementIcon
 import com.health.openscale.ui.shared.SharedViewModel
 import com.health.openscale.ui.screen.dialog.DateInputDialog
+import com.health.openscale.ui.screen.dialog.DeleteConfirmationDialog
 import com.health.openscale.ui.screen.dialog.NumberInputDialog
 import com.health.openscale.ui.screen.dialog.TextInputDialog
 import com.health.openscale.ui.screen.dialog.TimeInputDialog
@@ -118,6 +120,7 @@ fun MeasurementDetailScreen(
     // Flags for date and time dialogs that edit the main measurement timestamp.
     var showDatePickerForMainTimestamp by remember { mutableStateOf(false) }
     var showTimePickerForMainTimestamp by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     val allMeasurementTypes by sharedViewModel.measurementTypes.collectAsState()
     val lastMeasurementToPreloadFrom by sharedViewModel.lastMeasurementOfSelectedUser.collectAsState()
@@ -210,8 +213,20 @@ fun MeasurementDetailScreen(
     }
 
     // Configure the top bar save action.
-    LaunchedEffect(currentUserIdState, measurementTimestampState, valuesState.toMap()) {
-        sharedViewModel.setTopBarAction(
+    LaunchedEffect(currentUserIdState, measurementTimestampState, valuesState.toMap(), measurementId) {
+        val actions = mutableListOf<TopBarAction>()
+
+        if (measurementId > 0) {
+            actions.add(
+                TopBarAction(
+                    icon = Icons.Default.Delete,
+                    contentDescription = context.getString(R.string.action_delete_measurement_desc,dateFormat.format(Date(measurementTimestampState))),
+                    onClick = { showDeleteConfirmation = true }
+                )
+            )
+        }
+
+        actions.add(
             TopBarAction(
                 icon = Icons.Default.Save,
                 contentDescription = context.getString(R.string.action_save_measurement),
@@ -324,6 +339,8 @@ fun MeasurementDetailScreen(
                     }
                 })
         )
+
+        sharedViewModel.setTopBarActions(actions)
     }
 
     // Show loading indicator while data for an existing measurement is being fetched.
@@ -479,6 +496,34 @@ fun MeasurementDetailScreen(
             }
             else -> { /* Should not be reached as DATE/TIME have their own flags and derived are not editable here. */ }
         }
+    }
+
+    if (showDeleteConfirmation && loadedData != null) {
+        val formattedDate = remember(measurementTimestampState) {
+            DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale.getDefault())
+                .format(Date(measurementTimestampState))
+        }
+
+        val weightType = allMeasurementTypes.find { it.key == MeasurementTypeKey.WEIGHT }
+        val weightValue = weightType?.let { type ->
+            valuesState[type.id]?.let { value ->
+                LocaleUtils.formatValueForDisplay(value, type.unit)
+            }
+        } ?: ""
+
+        DeleteConfirmationDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            onConfirm = {
+                showDeleteConfirmation = false
+                scope.launch {
+                    sharedViewModel.deleteMeasurement(loadedData!!.measurement)
+                    isPendingNavigation = true
+                    navController.popBackStack()
+                }
+            },
+            title = stringResource(R.string.dialog_title_delete_item),
+            text = stringResource(R.string.dialog_message_delete_item, formattedDate, weightValue)
+        )
     }
 
     // --- Dialogs for the main measurement timestamp (measurementTimestampState) ---
