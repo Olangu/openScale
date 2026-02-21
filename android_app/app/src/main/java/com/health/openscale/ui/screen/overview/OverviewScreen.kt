@@ -869,21 +869,22 @@ fun MeasurementCard(
                 val actionIconColor =
                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
 
-                IconButton(onClick = onEdit, modifier = Modifier.size(iconButtonSize)) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = stringResource(
-                            R.string.action_edit_measurement_desc,
-                            dateFormatted
-                        ),
-                        tint = actionIconColor
-                    )
-                }
                 IconButton(onClick = onDelete, modifier = Modifier.size(iconButtonSize)) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = stringResource(
                             R.string.action_delete_measurement_desc,
+                            dateFormatted
+                        ),
+                        tint = actionIconColor
+                    )
+                }
+
+                IconButton(onClick = onEdit, modifier = Modifier.size(iconButtonSize)) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = stringResource(
+                            R.string.action_edit_measurement_desc,
                             dateFormatted
                         ),
                         tint = actionIconColor
