@@ -276,25 +276,57 @@ class DatabaseRepository @Inject constructor(
      * @param measurementId The ID of the measurement for which to recalculate derived values.
      */
     suspend fun recalculateDerivedValuesForMeasurement(measurementId: Int) {
-        val startTime = System.nanoTime()
-        LogManager.i(DERIVED_VALUES_TAG, "Starting recalculation of derived values for measurementId: $measurementId")
+        val measurement = measurementDao.getMeasurementById(measurementId) ?: return
+        val allGlobalTypes = measurementTypeDao.getAll().first()
+        val user = userDao.getById(measurement.userId).first() ?: return
 
-        val measurement = measurementDao.getMeasurementById(measurementId) ?: run {
-            //LogManager.w(DERIVED_VALUES_TAG, "Measurement with ID $measurementId not found. Cannot recalculate derived values.")
-            return
-        }
-        val userId = measurement.userId
+        recalculateDerivedValues(measurement, allGlobalTypes, user)
+    }
 
-        // Fetch all current values for this specific measurement and all global MeasurementType definitions
-        val currentMeasurementValues = measurementValueDao.getValuesForMeasurement(measurementId).first()
-        val allGlobalTypes = measurementTypeDao.getAll().first() // These are MeasurementType objects, containing unit info
+    /**
+     * Recalculates derived values for all measurements of a user, fetching shared
+     * data (types, user) once instead of per-measurement.
+     *
+     * @param userId The user whose measurements should be recalculated.
+     * @return The number of measurements successfully recalculated.
+     */
+    suspend fun recalculateDerivedValuesForUser(userId: Int): Int {
+        val allGlobalTypes = measurementTypeDao.getAll().first()
         val user = userDao.getById(userId).first() ?: run {
-           // LogManager.w(DERIVED_VALUES_TAG, "User with ID $userId not found for measurement $measurementId. Cannot recalculate derived values.")
-            return
+            LogManager.w(DERIVED_VALUES_TAG, "User with ID $userId not found. Cannot recalculate derived values.")
+            return 0
+        }
+        val measurements = measurementDao.getMeasurementsWithValuesForUser(userId).first()
+
+        LogManager.i(DERIVED_VALUES_TAG, "Batch recalculating derived values for ${measurements.size} measurements of userId: $userId")
+        val startTime = System.nanoTime()
+        var ok = 0
+
+        for (mwv in measurements) {
+            try {
+                recalculateDerivedValues(mwv.measurement, allGlobalTypes, user)
+                ok++
+            } catch (e: Exception) {
+                LogManager.e(DERIVED_VALUES_TAG, "Recalc failed for measurementId=${mwv.measurement.id}", e)
+            }
         }
 
-       // LogManager.d(DERIVED_VALUES_TAG, "Fetched ${currentMeasurementValues.size} current values, " +
-       //         "${allGlobalTypes.size} global types, and user '${user.name}' for measurement $measurementId.")
+        val durationMillis = (System.nanoTime() - startTime) / 1_000_000
+        LogManager.i(DERIVED_VALUES_TAG, "Batch recalculation done: $ok/${measurements.size} in $durationMillis ms.")
+        return ok
+    }
+
+    /**
+     * Core derived-value recalculation logic for a single measurement.
+     * Accepts pre-fetched [allGlobalTypes] and [user] to avoid redundant DB queries in batch scenarios.
+     */
+    private suspend fun recalculateDerivedValues(
+        measurement: Measurement,
+        allGlobalTypes: List<MeasurementType>,
+        user: User
+    ) {
+        val measurementId = measurement.id
+        val currentMeasurementValues = measurementValueDao.getValuesForMeasurement(measurementId).first()
 
         // Helper to find a raw value and its unit from the persisted MeasurementValues and MeasurementTypes
         val findValueAndUnit = { key: MeasurementTypeKey ->
@@ -306,7 +338,6 @@ class DatabaseRepository @Inject constructor(
                 val valueObject = currentMeasurementValues.find { it.typeId == measurementTypeObject.id }
                 val value = valueObject?.floatValue
                 val unit = measurementTypeObject.unit // The unit is defined in the MeasurementType object
-               // LogManager.v(DERIVED_VALUES_TAG, "findValueAndUnit for $key (typeId: ${measurementTypeObject.id}, unit: $unit): ${value ?: "not found"}")
                 Pair(value, unit)
             }
         }
@@ -327,9 +358,6 @@ class DatabaseRepository @Inject constructor(
                     // If derived value is null, delete any existing persisted value for it
                     if (existingDerivedValueObject != null) {
                         measurementValueDao.deleteById(existingDerivedValueObject.id)
-                        //LogManager.d(DERIVED_VALUES_TAG, "Derived value for key ${derivedTypeObject.key} is null. Deleted existing value (ID: ${existingDerivedValueObject.id}).")
-                    } else {
-                        //LogManager.v(DERIVED_VALUES_TAG, "Derived value for key ${derivedTypeObject.key} is null. No existing value to delete.")
                     }
                 } else {
                     // If derived value is not null, insert or update it
@@ -337,9 +365,6 @@ class DatabaseRepository @Inject constructor(
                     if (existingDerivedValueObject != null) {
                         if (existingDerivedValueObject.floatValue != roundedValue) {
                             measurementValueDao.update(existingDerivedValueObject.copy(floatValue = roundedValue))
-                         //   LogManager.d(DERIVED_VALUES_TAG, "Derived value for key ${derivedTypeObject.key} updated from ${existingDerivedValueObject.floatValue} to $roundedValue.")
-                        } else {
-                            //LogManager.v(DERIVED_VALUES_TAG, "Derived value for key ${derivedTypeObject.key} is $roundedValue (unchanged). No update needed.")
                         }
                     } else {
                         measurementValueDao.insert(
@@ -349,7 +374,6 @@ class DatabaseRepository @Inject constructor(
                                 floatValue = roundedValue
                             )
                         )
-                        //LogManager.d(DERIVED_VALUES_TAG, "New derived value for key ${derivedTypeObject.key} inserted: $roundedValue.")
                     }
                 }
             }
@@ -456,10 +480,7 @@ class DatabaseRepository @Inject constructor(
             ageYears = ageAtMeasurementYears,
             gender = user.gender
         ).also { saveOrUpdateDerivedValue(it, MeasurementTypeKey.CALIPER) }
-
-        val endTime = System.nanoTime()
-        val durationMillis = (endTime - startTime) / 1_000_000
-        LogManager.i(DERIVED_VALUES_TAG, "Finished recalculation of derived values for measurementId: $measurementId. Took $durationMillis ms.")    }
+    }
 
     // --- Private Calculation Helper Functions ---
     private val CALC_PROCESS_TAG = "DerivedValuesProcess"

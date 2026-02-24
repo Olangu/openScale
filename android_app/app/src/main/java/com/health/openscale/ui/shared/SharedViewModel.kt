@@ -558,14 +558,7 @@ class SharedViewModel @Inject constructor(
 
                     showSnackbar(messageResId = R.string.derived_backfill_start, duration = SnackbarDuration.Short)
 
-                    allForUser.forEach { mwv ->
-                        try {
-                            measurementFacade.recalculateDerivedValuesForMeasurement(mwv.measurement.id)
-                            ok++
-                        } catch (e: Exception) {
-                            LogManager.e(TAG, "Recalc failed for measurementId=${mwv.measurement.id}", e)
-                        }
-                    }
+                    ok += measurementFacade.recalculateDerivedValuesForUser(user.id)
                 }
 
                 if (usersAffected == 0) {

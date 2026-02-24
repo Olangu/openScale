@@ -71,6 +71,10 @@ class MeasurementFacade @Inject constructor(
         crud.recalculateDerivedValuesForMeasurement(measurementId)
     }
 
+    suspend fun recalculateDerivedValuesForUser(userId: Int): Int {
+        return crud.recalculateDerivedValuesForUser(userId)
+    }
+
     /**
      * Returns an enriched flow for a user by combining raw measurements with the global type catalog.
      * This flow now includes both historical trend/difference data and future projection data.

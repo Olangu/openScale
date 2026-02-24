@@ -162,6 +162,10 @@ class MeasurementCrudUseCases @Inject constructor(
         databaseRepository.recalculateDerivedValuesForMeasurement(measurementId)
     }
 
+    suspend fun recalculateDerivedValuesForUser(userId: Int): Int {
+        return databaseRepository.recalculateDerivedValuesForUser(userId)
+    }
+
     private suspend fun maybeVibrateOnMeasurement() {
         val enabled = runCatching { settingsFacade.hapticOnMeasurement.first() }.getOrDefault(false)
         if (!enabled) return
