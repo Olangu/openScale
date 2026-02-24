@@ -362,31 +362,25 @@ fun TableScreen(
     val noDataForSelectionMessage = stringResource(id = R.string.table_message_no_data_for_selection)
     val dateColumnHeader = stringResource(id = R.string.table_header_date)
 
-    fun deleteSelectedItems(selectedItemIds : List<Int>) {
-        if (selectedItemIds.isEmpty()) {
-            return
-        }
+    fun deleteSelectedItems(selectedItemIds: List<Int>) {
+        if (selectedItemIds.isEmpty()) return
 
         scope.launch {
-            var allSucceeded = true
-
-            for (id in selectedItemIds) {
-                val measurementWithValues = sharedViewModel.getMeasurementById(id).firstOrNull()
-
-                if (measurementWithValues != null) {
-                    val success = sharedViewModel.deleteMeasurement(measurementWithValues.measurement, true)
-
-                    if (!success) {
-                        allSucceeded = false
-                        break
-                    }
-                }
+            val measurements = selectedItemIds.mapNotNull { id ->
+                sharedViewModel.getMeasurementById(id).firstOrNull()?.measurement
             }
+            if (measurements.isEmpty()) return@launch
 
-            if (allSucceeded) {
-                sharedViewModel.showSnackbar(messageResId = R.string.snackbar_items_deleted_successfully, formatArgs = listOf(selectedItemIds.size))
+            val success = sharedViewModel.deleteMeasurements(measurements)
+            if (success) {
+                sharedViewModel.showSnackbar(
+                    messageResId = R.string.snackbar_items_deleted_successfully,
+                    formatArgs = listOf(measurements.size)
+                )
             } else {
-                sharedViewModel.showSnackbar(messageResId = R.string.snackbar_error_deleting_items)
+                sharedViewModel.showSnackbar(
+                    messageResId = R.string.snackbar_error_deleting_items
+                )
             }
         }
     }

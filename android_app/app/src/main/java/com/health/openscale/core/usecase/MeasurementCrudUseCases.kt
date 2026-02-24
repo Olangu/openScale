@@ -139,6 +139,25 @@ class MeasurementCrudUseCases @Inject constructor(
         MeasurementWidget.refreshAll(appContext)
     }
 
+    /**
+     * Batch-deletes the given [measurements] in a single DB query,
+     * triggers sync deletes per item, and refreshes widgets once.
+     *
+     * @return [Result.success] with the number of deleted rows, or [Result.failure] on error.
+     */
+    suspend fun deleteMeasurements(
+        measurements: List<Measurement>
+    ): Result<Int> = runCatching {
+        val count = databaseRepository.deleteMeasurementsByIds(measurements.map { it.id })
+        for (m in measurements) {
+            sync.triggerSyncDelete(Date(m.timestamp), "com.health.openscale.sync")
+            sync.triggerSyncDelete(Date(m.timestamp), "com.health.openscale.sync.oss")
+            sync.triggerSyncDelete(Date(m.timestamp), "com.health.openscale.sync.debug")
+        }
+        MeasurementWidget.refreshAll(appContext)
+        count
+    }
+
     suspend fun recalculateDerivedValuesForMeasurement(measurementId: Int) {
         databaseRepository.recalculateDerivedValuesForMeasurement(measurementId)
     }

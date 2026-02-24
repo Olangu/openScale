@@ -148,6 +148,11 @@ class DatabaseRepository @Inject constructor(
         measurementDao.delete(measurement)
     }
 
+    suspend fun deleteMeasurementsByIds(ids: List<Int>): Int {
+        LogManager.d(TAG, "Batch deleting ${ids.size} measurement(s)")
+        return measurementDao.deleteByIds(ids)
+    }
+
 
     // --- Measurement Value Operations ---
 

@@ -101,6 +101,14 @@ interface MeasurementDao {
     suspend fun delete(measurement: Measurement)
 
     /**
+     * Deletes multiple measurements by their IDs in a single query.
+     * @param ids The list of measurement IDs to delete.
+     * @return The number of measurements deleted.
+     */
+    @Query("DELETE FROM Measurement WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Int>): Int
+
+    /**
      * Deletes all measurements for a specific user.
      * @param userId The ID of the user whose measurements are to be deleted.
      * @return The number of measurements deleted.

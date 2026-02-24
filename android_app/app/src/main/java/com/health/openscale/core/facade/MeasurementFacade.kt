@@ -240,6 +240,13 @@ class MeasurementFacade @Inject constructor(
     ) = crud.deleteMeasurement(measurement)
 
     /**
+     * Batch-deletes multiple measurements in a single DB query.
+     */
+    suspend fun deleteMeasurements(
+        measurements: List<Measurement>
+    ) = crud.deleteMeasurements(measurements)
+
+    /**
      * Finds the closest item to a timestamp (prefers same-day matches).
      */
     fun findClosestMeasurement(

@@ -423,6 +423,13 @@ class SharedViewModel @Inject constructor(
         }
     }
 
+    suspend fun deleteMeasurements(measurements: List<Measurement>): Boolean {
+        return withContext(Dispatchers.IO) {
+            val result = measurementFacade.deleteMeasurements(measurements)
+            result.isSuccess
+        }
+    }
+
     // --- Helpers ---
     fun findClosestMeasurement(selectedTimestamp: Long, items: List<MeasurementWithValues>) =
         measurementFacade.findClosestMeasurement(selectedTimestamp, items)
