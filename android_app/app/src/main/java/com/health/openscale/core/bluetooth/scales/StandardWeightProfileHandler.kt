@@ -341,6 +341,7 @@ open class StandardWeightProfileHandler : ScaleDeviceHandler() {
             val minute = u8(value, offset); offset += 1
             val second = u8(value, offset); offset += 1
             cal.set(year, (month - 1).coerceAtLeast(0), day, hour, minute, second)
+            cal.set(Calendar.MILLISECOND, 0)
             m.dateTime = cal.time
         }
 
@@ -395,6 +396,7 @@ open class StandardWeightProfileHandler : ScaleDeviceHandler() {
             val minute = u8(value, offset); offset += 1
             val second = u8(value, offset); offset += 1
             cal.set(year, (month - 1).coerceAtLeast(0), day, hour, minute, second)
+            cal.set(Calendar.MILLISECOND, 0)
             m.dateTime = cal.time
         }
 
