@@ -179,7 +179,8 @@ open class StandardWeightProfileHandler : ScaleDeviceHandler() {
 
         val w = m.weight.takeIf { it > 0f } ?: 1f
 
-        m.muscle = (m.muscle / w) * 100f
+        // muscle is already a percentage from BCS (musclePercentagePresent flag) — do not convert
+        // water is a mass value from BCS (bodyWaterMassPresent flag) — convert to percentage
         m.water = (m.water / w) * 100f
 
         logD("transformed values before publish: weight=${m.weight}kg, lbm=${m.lbm}kg, bone=${m.bone}kg, " +
