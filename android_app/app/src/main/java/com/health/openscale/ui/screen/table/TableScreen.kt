@@ -63,6 +63,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -94,8 +95,10 @@ import com.health.openscale.ui.screen.dialog.DeleteConfirmationDialog
 import com.health.openscale.ui.screen.dialog.UserInputDialog
 import com.health.openscale.ui.screen.settings.BluetoothViewModel
 import com.health.openscale.ui.shared.TopBarAction
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -194,133 +197,121 @@ fun TableScreen(
         }
     )
 
-    val dateFormatterDate = remember {
-        DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
-    }
-    val dateFormatterDayOfWeek = remember {
-        SimpleDateFormat("EE", Locale.getDefault())
-    }
-    val dateFormatterTime = remember {
-        DateFormat.getTimeInstance(DateFormat.SHORT, Locale.getDefault())
-    }
-
     val plausibleRangesByTypeKey = remember(displayedTypes) {
         displayedTypes.associate { type ->
             type.key to sharedViewModel.getPlausiblePercentRange(type.key)
         }
     }
 
-    // Transform measurements -> table rows (compute eval state & formatted strings here).
-    val tableData = remember(
-        enrichedMeasurements,
-        displayedTypes,
-        userEvaluationContext,
-        plausibleRangesByTypeKey
+    // Transform measurements -> table rows off the main thread to avoid ANR on large lists.
+    val tableData by produceState(
+        initialValue = emptyList<TableRowDataInternal>(),
+        enrichedMeasurements, displayedTypes, userEvaluationContext, plausibleRangesByTypeKey
     ) {
-        if (enrichedMeasurements.isEmpty() || displayedTypes.isEmpty()) {
-            emptyList()
-        } else {
-            enrichedMeasurements.map { enrichedItem ->
-                val ts = enrichedItem.measurementWithValues.measurement.timestamp
-                val date = Date(ts)
+        value = withContext(Dispatchers.Default) {
+            if (enrichedMeasurements.isEmpty() || displayedTypes.isEmpty()) {
+                emptyList()
+            } else {
+                // Create thread-local formatters (DateFormat is not thread-safe).
+                val fmtDate = DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault())
+                val fmtDay = SimpleDateFormat("EE", Locale.getDefault())
+                val fmtTime = DateFormat.getTimeInstance(DateFormat.SHORT, Locale.getDefault())
 
-                val valuesByTypeId = enrichedItem.valuesWithTrend
-                    .associateBy { it.currentValue.type.id }
+                enrichedMeasurements.map { enrichedItem ->
+                    val ts = enrichedItem.measurementWithValues.measurement.timestamp
+                    val date = Date(ts)
 
-                val cellValues: Map<Int, TableCellData?> = displayedTypes.associate { colType ->
-                    val typeId = colType.id
-                    val valueWithTrend = valuesByTypeId[typeId]
+                    val valuesByTypeId = enrichedItem.valuesWithTrend
+                        .associateBy { it.currentValue.type.id }
 
-                    if (valueWithTrend != null) {
-                        val originalMeasurementValue = valueWithTrend.currentValue.value
-                        val actualType = valueWithTrend.currentValue.type
+                    val cellValues: Map<Int, TableCellData?> = displayedTypes.associate { colType ->
+                        val typeId = colType.id
+                        val valueWithTrend = valuesByTypeId[typeId]
 
-                        // Build the final value string for display (includes unit for numeric types).
-                        val displayValueStr: String = when (actualType.inputType) {
-                            InputFieldType.FLOAT -> originalMeasurementValue.floatValue?.let {
-                                LocaleUtils.formatValueForDisplay(it.toString(), actualType.unit)
-                            } ?: "-"
-                            InputFieldType.INT -> originalMeasurementValue.intValue?.let {
-                                LocaleUtils.formatValueForDisplay(it.toString(), actualType.unit)
-                            } ?: "-"
-                            InputFieldType.TEXT -> originalMeasurementValue.textValue ?: "-"
-                            else -> {
-                                // Fallback for any other input type: prefer text, then float, then int
-                                originalMeasurementValue.textValue
-                                    ?: originalMeasurementValue.floatValue?.toString()
-                                    ?: originalMeasurementValue.intValue?.toString()
-                                    ?: "-"
-                            }
-                        }
+                        if (valueWithTrend != null) {
+                            val originalMeasurementValue = valueWithTrend.currentValue.value
+                            val actualType = valueWithTrend.currentValue.type
 
-                        // Numeric value (only for evaluation flags).
-                        val numeric: Float? = when (actualType.inputType) {
-                            InputFieldType.FLOAT -> originalMeasurementValue.floatValue
-                            InputFieldType.INT -> originalMeasurementValue.intValue?.toFloat()
-                            else -> null
-                        }
-
-                        // Compute evaluation state if possible (same logic as other screens).
-                        val ctx = userEvaluationContext
-                        val evalResult = if (ctx != null && numeric != null) {
-                            sharedViewModel.evaluateMeasurement(
-                                type = actualType,
-                                value = numeric,
-                                userEvaluationContext = ctx,
-                                measuredAtMillis = ts
-                            )
-                        } else null
-
-                        val noAgeBand = evalResult?.let { it.lowLimit < 0f || it.highLimit < 0f } ?: false
-
-                        val plausible = plausibleRangesByTypeKey[actualType.key]
-                        val outOfPlausibleRange =
-                            if (numeric == null) {
-                                false
-                            } else {
-                                // If there is no configured plausible range, use a % fallback for UnitType.PERCENT
-                                plausible?.let { numeric < it.start || numeric > it.endInclusive }
-                                    ?: (actualType.unit == UnitType.PERCENT && (numeric < 0f || numeric > 100f))
+                            val displayValueStr: String = when (actualType.inputType) {
+                                InputFieldType.FLOAT -> originalMeasurementValue.floatValue?.let {
+                                    LocaleUtils.formatValueForDisplay(it.toString(), actualType.unit)
+                                } ?: "-"
+                                InputFieldType.INT -> originalMeasurementValue.intValue?.let {
+                                    LocaleUtils.formatValueForDisplay(it.toString(), actualType.unit)
+                                } ?: "-"
+                                InputFieldType.TEXT -> originalMeasurementValue.textValue ?: "-"
+                                else -> {
+                                    originalMeasurementValue.textValue
+                                        ?: originalMeasurementValue.floatValue?.toString()
+                                        ?: originalMeasurementValue.intValue?.toString()
+                                        ?: "-"
+                                }
                             }
 
-                        // Pre-format the diff (includes sign & unit). Only show "+" when trend != NONE.
-                        val diffDisplayStr = valueWithTrend.difference?.let { diff ->
-                            LocaleUtils.formatValueForDisplay(
-                                value = diff.toString(),
-                                unit = actualType.unit,
-                                includeSign = (valueWithTrend.trend != Trend.NONE)
+                            val numeric: Float? = when (actualType.inputType) {
+                                InputFieldType.FLOAT -> originalMeasurementValue.floatValue
+                                InputFieldType.INT -> originalMeasurementValue.intValue?.toFloat()
+                                else -> null
+                            }
+
+                            val ctx = userEvaluationContext
+                            val evalResult = if (ctx != null && numeric != null) {
+                                sharedViewModel.evaluateMeasurement(
+                                    type = actualType,
+                                    value = numeric,
+                                    userEvaluationContext = ctx,
+                                    measuredAtMillis = ts
+                                )
+                            } else null
+
+                            val noAgeBand = evalResult?.let { it.lowLimit < 0f || it.highLimit < 0f } ?: false
+
+                            val plausible = plausibleRangesByTypeKey[actualType.key]
+                            val outOfPlausibleRange =
+                                if (numeric == null) {
+                                    false
+                                } else {
+                                    plausible?.let { numeric < it.start || numeric > it.endInclusive }
+                                        ?: (actualType.unit == UnitType.PERCENT && (numeric < 0f || numeric > 100f))
+                                }
+
+                            val diffDisplayStr = valueWithTrend.difference?.let { diff ->
+                                LocaleUtils.formatValueForDisplay(
+                                    value = diff.toString(),
+                                    unit = actualType.unit,
+                                    includeSign = (valueWithTrend.trend != Trend.NONE)
+                                )
+                            }
+
+                            typeId to TableCellData(
+                                typeId = typeId,
+                                displayValue = displayValueStr,
+                                diffDisplay = diffDisplayStr,
+                                trend = valueWithTrend.trend,
+                                evalState = evalResult?.state,
+                                flagged = noAgeBand || outOfPlausibleRange,
+                                unitType = actualType.unit
+                            )
+                        } else {
+                            typeId to TableCellData(
+                                typeId = typeId,
+                                displayValue = "-",
+                                diffDisplay = null,
+                                trend = Trend.NOT_APPLICABLE,
+                                evalState = null,
+                                flagged = false,
+                                unitType = colType.unit
                             )
                         }
-
-                        typeId to TableCellData(
-                            typeId = typeId,
-                            displayValue = displayValueStr,
-                            diffDisplay = diffDisplayStr,
-                            trend = valueWithTrend.trend,
-                            evalState = evalResult?.state,
-                            flagged = noAgeBand || outOfPlausibleRange,
-                            unitType = actualType.unit
-                        )
-                    } else {
-                        // No value for this type in this measurement -> placeholder cell.
-                        typeId to TableCellData(
-                            typeId = typeId,
-                            displayValue = "-",
-                            diffDisplay = null,
-                            trend = Trend.NOT_APPLICABLE,
-                            evalState = null,
-                            flagged = false,
-                            unitType = colType.unit
-                        )
                     }
-                }
 
-                TableRowDataInternal(
-                    measurementId = enrichedItem.measurementWithValues.measurement.id,
-                    timestamp = ts,
-                    formattedTimestamp = "${dateFormatterDate.format(date)} (${dateFormatterDayOfWeek.format(date)})\n${dateFormatterTime.format(date)}",
-                    values = cellValues
-                )
+                    TableRowDataInternal(
+                        measurementId = enrichedItem.measurementWithValues.measurement.id,
+                        timestamp = ts,
+                        formattedTimestamp = "${fmtDate.format(date)} (${fmtDay.format(date)})\n${fmtTime.format(date)}",
+                        values = cellValues
+                    )
+                }
             }
         }
     }

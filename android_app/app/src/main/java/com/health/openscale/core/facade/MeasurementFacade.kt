@@ -34,11 +34,13 @@ import com.health.openscale.core.model.UserEvaluationContext
 import com.health.openscale.core.usecase.MeasurementEvaluationUseCases
 import com.health.openscale.core.usecase.MeasurementTransformationUseCase
 import com.health.openscale.core.usecase.MeasurementTypeCrudUseCases
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -114,7 +116,7 @@ class MeasurementFacade @Inject constructor(
                     measurementWithValuesProjected = projectedForCurrent
                 )
             }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     /**
