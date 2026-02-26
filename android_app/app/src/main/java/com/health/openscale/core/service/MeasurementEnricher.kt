@@ -240,15 +240,13 @@ class MeasurementEnricher @Inject constructor(
         // Use flatMap to process each measurement and combine the resulting lists of ValueWithDifference.
         return measurements.flatMapIndexed { index, current ->
             val previous: MeasurementWithValues? = measurements.getOrNull(index + 1)
+            val previousByTypeId = previous?.values?.associateBy { it.type.id }
 
-            // Build enriched values for the current measurement.
-            // This mapNotNull block correctly returns a List<ValueWithDifference> for a single 'current' measurement.
             current.values.mapNotNull { currV ->
                 val type = typesById[currV.type.id] ?: return@mapNotNull null
                 if (!type.isEnabled) return@mapNotNull null
 
-                val prevV: MeasurementValueWithType? =
-                    previous?.values?.firstOrNull { it.type.id == type.id }
+                val prevV: MeasurementValueWithType? = previousByTypeId?.get(type.id)
 
                 toValueWithDifference(currV.copy(type = type), prevV)
             }.sortedBy { it.currentValue.type.displayOrder }
