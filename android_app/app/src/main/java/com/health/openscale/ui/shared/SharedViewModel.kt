@@ -244,18 +244,11 @@ class SharedViewModel @Inject constructor(
                 if (!initialAttemptDone) {
                     flowOf(UiState.Loading)
                 } else {
-                    userFacade.observeSelectedUserId().flatMapLatest { uidFromFacade ->
-                        if (uidFromFacade == null) {
-                            flowOf(UiState.Success(emptyList()))
-                        } else {
-                            measurementFacade.enrichedFlowForUser(uidFromFacade, measurementTypes)
-                                .map<List<EnrichedMeasurement>, UiState<List<EnrichedMeasurement>>> {
-                                    UiState.Success(it)
-                                }
-                                .onStart { emit(UiState.Loading) }
-                                .catch { emit(UiState.Error(it.message)) }
+                    enrichedMeasurementsFlow
+                        .map<List<EnrichedMeasurement>, UiState<List<EnrichedMeasurement>>> {
+                            UiState.Success(it)
                         }
-                    }
+                        .catch { emit(UiState.Error(it.message)) }
                 }
             }.stateIn(
                 scope = viewModelScope,
@@ -269,28 +262,22 @@ class SharedViewModel @Inject constructor(
                 if (!initialAttemptDone) {
                     flowOf(UiState.Loading)
                 } else {
-                    userFacade.observeSelectedUserId().flatMapLatest { uidFromFacade ->
-                        if (uidFromFacade == null) {
-                            flowOf(UiState.Success(emptyList()))
-                        } else {
-                            measurementFacade.pipeline(
-                                userId = uidFromFacade,
-                                measurementTypesFlow = measurementTypes,
-                                startTimeMillisFlow = flowOf(null), // No time range filter
-                                endTimeMillisFlow = flowOf(null), // No time range filter
-                                typesToSmoothFlow = typesToSmoothAndDisplay,
-                                algorithmFlow = selectedSmoothingAlgorithm,
-                                alphaFlow = smoothingAlpha,
-                                windowFlow = smoothingWindowSize,
-                                maxGapDaysFlow = smoothingMaxGapDays
-                            )
-                                .map<List<EnrichedMeasurement>, UiState<List<EnrichedMeasurement>>> {
-                                    UiState.Success(it)
-                                }
-                                .onStart { emit(UiState.Loading) }
-                                .catch { emit(UiState.Error(it.message)) }
+                    measurementFacade.pipeline(
+                        enrichedFlow = enrichedMeasurementsFlow,
+                        measurementTypesFlow = measurementTypes,
+                        startTimeMillisFlow = flowOf(null),
+                        endTimeMillisFlow = flowOf(null),
+                        typesToSmoothFlow = typesToSmoothAndDisplay,
+                        algorithmFlow = selectedSmoothingAlgorithm,
+                        alphaFlow = smoothingAlpha,
+                        windowFlow = smoothingWindowSize,
+                        maxGapDaysFlow = smoothingMaxGapDays
+                    )
+                        .map<List<EnrichedMeasurement>, UiState<List<EnrichedMeasurement>>> {
+                            UiState.Success(it)
                         }
-                    }
+                        .onStart { emit(UiState.Loading) }
+                        .catch { emit(UiState.Error(it.message)) }
                 }
             }.stateIn(
                 scope = viewModelScope,
@@ -302,22 +289,15 @@ class SharedViewModel @Inject constructor(
         startTimeMillis: Long?,
         endTimeMillis: Long?
     ): Flow<UiState<List<EnrichedMeasurement>>> =
-        selectedUserId.flatMapLatest { uid ->
-            if (uid == null) {
-                flowOf(UiState.Success(emptyList()))
-            } else {
-                measurementFacade
-                    .timeFilteredEnrichedFlow(
-                        userId = uid,
-                        measurementTypesFlow = measurementTypes,
-                        startTimeMillis = startTimeMillis,
-                        endTimeMillis = endTimeMillis
-                    )
-                    .map<List<EnrichedMeasurement>, UiState<List<EnrichedMeasurement>>> { UiState.Success(it) }
-                    .onStart { emit(UiState.Loading) }
-                    .catch { emit(UiState.Error(it.message)) }
-            }
-        }
+        measurementFacade
+            .timeFilteredEnrichedFlow(
+                enrichedFlow = enrichedMeasurementsFlow,
+                startTimeMillis = startTimeMillis,
+                endTimeMillis = endTimeMillis
+            )
+            .map<List<EnrichedMeasurement>, UiState<List<EnrichedMeasurement>>> { UiState.Success(it) }
+            .onStart { emit(UiState.Loading) }
+            .catch { emit(UiState.Error(it.message)) }
 
     fun performCsvExport(userId: Int, uri: Uri, contentResolver: ContentResolver, filterByMeasurementIds: List<Int>? = null) {
         viewModelScope.launch {
@@ -451,20 +431,17 @@ class SharedViewModel @Inject constructor(
         endTimeMillis: Long?,
         typeIds: Set<Int>
     ): Flow<List<EnrichedMeasurement>> {
-        return selectedUserId.flatMapLatest { userId ->
-            if (userId == null) flowOf(emptyList())
-            else measurementFacade.pipeline(
-                userId = userId,
-                measurementTypesFlow = measurementTypes,
-                startTimeMillisFlow = flowOf(startTimeMillis),
-                endTimeMillisFlow = flowOf(endTimeMillis),
-                typesToSmoothFlow = flowOf(typeIds),
-                algorithmFlow = selectedSmoothingAlgorithm,
-                alphaFlow = smoothingAlpha,
-                windowFlow = smoothingWindowSize,
-                maxGapDaysFlow = chartSmoothingMaxGapDays
-            )
-        }
+        return measurementFacade.pipeline(
+            enrichedFlow = enrichedMeasurementsFlow,
+            measurementTypesFlow = measurementTypes,
+            startTimeMillisFlow = flowOf(startTimeMillis),
+            endTimeMillisFlow = flowOf(endTimeMillis),
+            typesToSmoothFlow = flowOf(typeIds),
+            algorithmFlow = selectedSmoothingAlgorithm,
+            alphaFlow = smoothingAlpha,
+            windowFlow = smoothingWindowSize,
+            maxGapDaysFlow = chartSmoothingMaxGapDays
+        )
     }
 
     fun evaluateMeasurement(

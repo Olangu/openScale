@@ -138,6 +138,17 @@ class MeasurementFacade @Inject constructor(
     }
 
     /**
+     * Time-filters a pre-enriched flow, avoiding a redundant enrichment pass.
+     */
+    fun timeFilteredEnrichedFlow(
+        enrichedFlow: Flow<List<EnrichedMeasurement>>,
+        startTimeMillis: Long?,
+        endTimeMillis: Long?
+    ): Flow<List<EnrichedMeasurement>> {
+        return filter.getTimeFiltered(enrichedFlow, startTimeMillis, endTimeMillis)
+    }
+
+    /**
      * Filters a list of enriched measurements to those that contain at least one of the given types.
      */
     fun filterByTypes(
@@ -149,18 +160,9 @@ class MeasurementFacade @Inject constructor(
     /**
      * Full pipeline: query + enrich + time filter + (optional) smoothing for selected types.
      *
-     * This orchestrates the entire data flow for the charts, including robust smoothing that
-     * handles irregular time intervals by splitting the data into blocks.
-     *
-     * @param userId Database id of the user.
-     * @param measurementTypesFlow Global type catalog.
-     * @param startTimeMillisFlow Flow emitting the start timestamp for filtering, or null for no start bound.
-     * @param endTimeMillisFlow Flow emitting the end timestamp for filtering, or null for no end bound.
-     * @param typesToSmoothFlow Set of type ids to smooth.
-     * @param algorithmFlow Selected smoothing algorithm.
-     * @param alphaFlow Alpha for exponential smoothing (0..1).
-     * @param windowFlow Window for SMA (≥1).
-     * @param maxGapDaysFlow The maximum number of days between measurements before smoothing is reset.
+     * @param userId Database id of the user.  Creates a new enrichment flow internally.
+     *               Prefer the overload accepting a pre-enriched [Flow] when the caller
+     *               already has [enrichedFlowForUser] cached.
      */
     fun pipeline(
         userId: Int,
@@ -172,13 +174,38 @@ class MeasurementFacade @Inject constructor(
         alphaFlow: Flow<Float>,
         windowFlow: Flow<Int>,
         maxGapDaysFlow: Flow<Int>
-    ): Flow<List<EnrichedMeasurement>> {
-        val enriched = enrichedFlowForUser(userId, measurementTypesFlow)
+    ): Flow<List<EnrichedMeasurement>> = pipeline(
+        enrichedFlow = enrichedFlowForUser(userId, measurementTypesFlow),
+        measurementTypesFlow = measurementTypesFlow,
+        startTimeMillisFlow = startTimeMillisFlow,
+        endTimeMillisFlow = endTimeMillisFlow,
+        typesToSmoothFlow = typesToSmoothFlow,
+        algorithmFlow = algorithmFlow,
+        alphaFlow = alphaFlow,
+        windowFlow = windowFlow,
+        maxGapDaysFlow = maxGapDaysFlow
+    )
 
+    /**
+     * Full pipeline from a pre-enriched flow: time filter + (optional) smoothing.
+     * Use this when the caller already has a shared enrichment flow to avoid
+     * redundant enrichment passes.
+     */
+    fun pipeline(
+        enrichedFlow: Flow<List<EnrichedMeasurement>>,
+        measurementTypesFlow: Flow<List<MeasurementType>>,
+        startTimeMillisFlow: Flow<Long?>,
+        endTimeMillisFlow: Flow<Long?>,
+        typesToSmoothFlow: Flow<Set<Int>>,
+        algorithmFlow: Flow<SmoothingAlgorithm>,
+        alphaFlow: Flow<Float>,
+        windowFlow: Flow<Int>,
+        maxGapDaysFlow: Flow<Int>
+    ): Flow<List<EnrichedMeasurement>> {
         @OptIn(ExperimentalCoroutinesApi::class)
         val timeFiltered: Flow<List<EnrichedMeasurement>> =
             combine(
-                enriched,
+                enrichedFlow,
                 startTimeMillisFlow,
                 endTimeMillisFlow
             ) { list, startTime, endTime ->
