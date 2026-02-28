@@ -745,15 +745,13 @@ fun TableScreen(
                                             )
                                         )
                                     }
-                                }
-                                .height(IntrinsicSize.Min),
+                                },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Date cell (fixed column)
                             if (isInSelectionMode) {
                                 Box(
                                     modifier = Modifier
-                                        .fillMaxHeight()
                                         .padding(horizontal = 6.dp),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
@@ -774,8 +772,7 @@ fun TableScreen(
                                 cellData = null,
                                 fixedText = rowData.formattedTimestamp,
                                 modifier = Modifier
-                                    .widthIn(min = dateColMin, max = dateColMax)
-                                    .fillMaxHeight(),
+                                    .widthIn(min = dateColMin, max = dateColMax),
                                 alignment = TextAlign.Start,
                                 isDateCell = true
                             )
@@ -784,7 +781,6 @@ fun TableScreen(
                                 Modifier
                                     .weight(1f)
                                     .horizontalScroll(horizontalScrollState)
-                                    .fillMaxHeight()
                             ) {
                                 displayedTypes.forEach { colType ->
                                     val cellData = rowData.values[colType.id]
@@ -792,8 +788,7 @@ fun TableScreen(
                                     TableDataCellInternal(
                                         cellData = cellData,
                                         modifier = Modifier
-                                            .width(width)
-                                            .fillMaxHeight(),
+                                            .width(width),
                                         alignment = if (colType.key == MeasurementTypeKey.COMMENT) TextAlign.Start else TextAlign.End
                                     )
                                 }
@@ -966,7 +961,7 @@ fun TableDataCellInternal(
                 text = "-",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = alignment,
-                modifier = Modifier.fillMaxHeight()
+                modifier = Modifier
             )
         }
     }
