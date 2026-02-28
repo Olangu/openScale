@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.transformLatest
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,6 +52,8 @@ import javax.inject.Singleton
  * Keeps ViewModels thin by providing ready-to-consume flows and simple delegates
  * for CRUD, selection helpers, and sync triggers.
  */
+private const val INITIAL_PAGE_SIZE = 50
+
 @Singleton
 class MeasurementFacade @Inject constructor(
     private val query: MeasurementQueryUseCases,
@@ -84,6 +87,7 @@ class MeasurementFacade @Inject constructor(
      * @param userId Database id of the user.
      * @param measurementTypesFlow Global catalog (typically newest config) used for ordering/enabled state.
      */
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun enrichedFlowForUser(
         userId: Int,
         measurementTypesFlow: Flow<List<MeasurementType>>
@@ -91,10 +95,29 @@ class MeasurementFacade @Inject constructor(
         val base = query.getMeasurementsForUser(userId)
 
         return combine(base, measurementTypesFlow) { measurements, types ->
+            measurements to types
+        }.transformLatest { (measurements, types) ->
             if (measurements.isEmpty()) {
-                return@combine emptyList()
+                emit(emptyList())
+                return@transformLatest
             }
 
+            // Stage 1: First page — quick differences, no projection
+            if (measurements.size > INITIAL_PAGE_SIZE) {
+                val window = measurements.take(INITIAL_PAGE_SIZE + 1) // +1 for boundary diff
+                val quickDiffs = enricher.enrichWithDifferences(window, types)
+                val quickTrends = quickDiffs.groupBy { it.currentValue.value.measurementId }
+
+                emit(window.take(INITIAL_PAGE_SIZE).map { m ->
+                    EnrichedMeasurement(
+                        measurementWithValues = m,
+                        valuesWithTrend = quickTrends[m.measurement.id] ?: emptyList(),
+                        measurementWithValuesProjected = emptyList()
+                    )
+                })
+            }
+
+            // Stage 2: Full enrichment with projections
             val differenceValues = enricher.enrichWithDifferences(measurements, types)
             val projectedValues = enricher.enrichWithProjection(measurements, types)
 
@@ -102,20 +125,14 @@ class MeasurementFacade @Inject constructor(
                 it.currentValue.value.measurementId
             }
 
-            measurements.mapIndexed { index, currentMeasurement ->
-                val trendsForCurrent = trendsByMeasurementId[currentMeasurement.measurement.id]
-                    ?: emptyList()
-
-                // Projections belong to the newest measurement only (index == 0),
-                // as they are calculated from the last known real data point.
-                val projectedForCurrent = if (index == 0) projectedValues else emptyList()
-
+            emit(measurements.mapIndexed { index, currentMeasurement ->
                 EnrichedMeasurement(
                     measurementWithValues = currentMeasurement,
-                    valuesWithTrend = trendsForCurrent,
-                    measurementWithValuesProjected = projectedForCurrent
+                    valuesWithTrend = trendsByMeasurementId[currentMeasurement.measurement.id]
+                        ?: emptyList(),
+                    measurementWithValuesProjected = if (index == 0) projectedValues else emptyList()
                 )
-            }
+            })
         }.flowOn(Dispatchers.Default)
     }
 
