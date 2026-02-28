@@ -51,6 +51,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -159,7 +160,12 @@ fun TableScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val enrichedMeasurements by sharedViewModel.enrichedMeasurementsFlow.collectAsState()
+    val overviewState by sharedViewModel.overviewUiState.collectAsState()
+    val enrichedMeasurements = when (val s = overviewState) {
+        is SharedViewModel.UiState.Success -> s.data
+        else -> emptyList()
+    }
+    val isLoading = overviewState is SharedViewModel.UiState.Loading
     val allAvailableTypesFromVM by sharedViewModel.measurementTypes.collectAsState()
     val userEvaluationContext by sharedViewModel.userEvaluationContext.collectAsState()
 
@@ -604,6 +610,14 @@ fun TableScreen(
 
         // --- TABLE CONTENT ---
         when {
+            isLoading -> {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(16.dp), Alignment.Center
+                ) { CircularProgressIndicator() }
+            }
+
             enrichedMeasurements.isEmpty() && displayedTypes.isEmpty() -> {
                 Box(
                     Modifier
